@@ -51,6 +51,7 @@ Microsoft::WRL::ComPtr<ID3D11PixelShader> g_pixelShader;
 Microsoft::WRL::ComPtr<ID3D11InputLayout> g_inputLayout;
 Microsoft::WRL::ComPtr<ID3D11Buffer> g_vertexBuffer;
 Microsoft::WRL::ComPtr<ID3D11Buffer> g_indexBuffer;
+Microsoft::WRL::ComPtr<ID3D11Buffer> g_constantBuffer;
 DirectX::XMMATRIX g_worldTransform;
 DirectX::XMMATRIX g_viewTransform;
 DirectX::XMMATRIX g_projectionTransform;
@@ -401,6 +402,27 @@ void InitializeD3D(HWND hWnd)
 	{
 		throw std::runtime_error("*** ERROR: Failed create input layout ***\n");
 	}
+
+	// ConstantBuffer
+	bd.Usage = D3D11_USAGE_DEFAULT;
+	bd.ByteWidth = sizeof(MyConstants);
+	bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	bd.CPUAccessFlags = 0;
+	hr = g_device->CreateBuffer(&bd, nullptr, g_constantBuffer.GetAddressOf());
+	if (hr != S_OK)
+	{
+		throw std::runtime_error("*** ERROR: Failed create constant buffer ***\n");
+	}
+
+	// Constants
+	g_worldTransform = XMMatrixIdentity();
+
+	XMVECTOR eye = XMVectorSet(0.0f, 4.0f, -10.0f, 0.0f);
+	XMVECTOR lookAt = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+	g_viewTransform = XMMatrixLookAtLH(eye, lookAt, up);
+
+	g_projectionTransform = XMMatrixPerspectiveFovLH(XM_PIDIV4, 1280.f/720.f, 0.01f, 100.0f);
 }
 
 //--------------------------------------------------------------------------------------
@@ -408,6 +430,13 @@ void InitializeD3D(HWND hWnd)
 //--------------------------------------------------------------------------------------
 void DrawSomething(HWND hWnd)
 {
+	// update constant buffer (Note: UpdateSubresource excessively is bad for perf!)
+	MyConstants cb;
+	cb.worldTransform = DirectX::XMMatrixTranspose(g_worldTransform);
+	cb.viewTransform = DirectX::XMMatrixTranspose(g_viewTransform);
+	cb.projectionTransform = DirectX::XMMatrixTranspose(g_projectionTransform);
+	g_deviceContext->UpdateSubresource(g_constantBuffer.Get(), 0, nullptr, &cb, 0, 0);
+
 	// set viewport
 	D3D11_VIEWPORT viewport = { 1280.f, 720.f, 0.f, 1.f, 0, 0 };
 	g_deviceContext->RSSetViewports(1, &viewport);
@@ -417,7 +446,8 @@ void DrawSomething(HWND hWnd)
 	g_deviceContext->OMSetRenderTargets(ARRAYSIZE(renderTargets), renderTargets, g_depthBufferView.Get());
 
 	// clear
-	g_deviceContext->ClearRenderTargetView(g_backBufferView.Get(), DirectX::Colors::DimGray);
+	g_deviceContext->ClearRenderTargetView(g_backBufferView.Get(), DirectX::Colors::LightSkyBlue);
+	g_deviceContext->ClearDepthStencilView(g_depthBufferView.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
 
 	// bind geometry
 	ID3D11Buffer* vertexBuffers[] = { g_vertexBuffer.Get() };
@@ -435,6 +465,10 @@ void DrawSomething(HWND hWnd)
 	// bind shaders
 	g_deviceContext->VSSetShader(g_vertexShader.Get(), nullptr, 0);
 	g_deviceContext->PSSetShader(g_pixelShader.Get(), nullptr, 0);
+
+	// bind constants
+	ID3D11Buffer* constantBuffers[] = { g_constantBuffer.Get() };
+	g_deviceContext->VSSetConstantBuffers(0, ARRAYSIZE(constantBuffers), constantBuffers);
 
 	// w00t
 	g_deviceContext->DrawIndexed(36 /*12 tris*/, 0, 0);
