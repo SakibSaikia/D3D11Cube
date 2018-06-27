@@ -1,3 +1,5 @@
 /.vs
 /Debug
+/CompiledShaders
+/x64
 *.user

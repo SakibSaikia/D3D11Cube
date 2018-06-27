@@ -4,6 +4,7 @@
 #include <wrl.h>
 #include <dxgi1_4.h>
 #include <d3d11_1.h>
+#include <d3dcompiler.h>
 #include <DirectXMath.h>
 #include <DirectXColors.h>
 
@@ -15,6 +16,7 @@
 
 #pragma comment(lib, "D3D11.lib")
 #pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "D3DCompiler.lib")
 
 //--------------------------------------------------------------------------------------
 // Structures
@@ -22,7 +24,7 @@
 struct MyVertex
 {
 	DirectX::XMFLOAT3 position;
-	DirectX::XMFLOAT3 color;
+	DirectX::XMFLOAT4 color;
 };
 
 
@@ -93,7 +95,7 @@ void InitializeWindow(HINSTANCE hInstance, int nShowCmd)
 	desc.hCursor = LoadCursor(nullptr, IDC_ARROW);
 	desc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW);
 	desc.lpszMenuName = nullptr;
-	desc.lpszClassName = "AppWindow";
+	desc.lpszClassName = L"AppWindow";
 
 	if (!RegisterClass(&desc))
 	{
@@ -177,6 +179,38 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	return DefWindowProc(hWnd, msg, wParam, lParam);
 }
 
+//--------------------------------------------------------------------------------------
+// D3D Utils
+//--------------------------------------------------------------------------------------
+Microsoft::WRL::ComPtr<ID3DBlob> LoadBlob(const std::string& filename)
+{
+	std::string filepath = R"(CompiledShaders\)" + filename;
+	std::ifstream fileHandle(filepath, std::ios::binary);
+	assert(fileHandle.good() && L"Error opening file");
+
+	// file size
+	fileHandle.seekg(0, std::ios::end);
+	std::ifstream::pos_type size = fileHandle.tellg();
+	fileHandle.seekg(0, std::ios::beg);
+
+	// serialize bytecode
+	Microsoft::WRL::ComPtr<ID3DBlob> blob;
+	HRESULT hr = D3DCreateBlob(size, blob.GetAddressOf());
+	if (hr != S_OK)
+	{
+		throw std::invalid_argument("*** ERROR: Failed to create shader blob ***\n");
+	}
+
+	fileHandle.read(static_cast<char*>(blob->GetBufferPointer()), size);
+
+	fileHandle.close();
+
+	return blob;
+}
+
+//--------------------------------------------------------------------------------------
+// D3D Initialization
+//--------------------------------------------------------------------------------------
 void InitializeD3D(HWND hWnd)
 {
 	HRESULT hr;
@@ -200,7 +234,7 @@ void InitializeD3D(HWND hWnd)
 		throw std::invalid_argument("*** ERROR: Device creation failed ***\n");
 	}
 
-	// Swap chain
+	// SwapChain
 	hr = CreateDXGIFactory1(IID_PPV_ARGS(g_dxgiFactory.GetAddressOf()));
 
 	if (hr != S_OK)
@@ -244,7 +278,7 @@ void InitializeD3D(HWND hWnd)
 		throw std::runtime_error("*** ERROR: Failed create back buffer view ***\n");
 	}
 
-	// Depth buffer
+	// DepthBuffer
 	D3D11_TEXTURE2D_DESC descDepth = {};
 	descDepth.Width = 1280;
 	descDepth.Height = 720;
@@ -272,16 +306,146 @@ void InitializeD3D(HWND hWnd)
 	{
 		throw std::runtime_error("*** ERROR: Failed create depth buffer view ***\n");
 	}
+
+	// Shaders
+	Microsoft::WRL::ComPtr<ID3DBlob> vsBlob = LoadBlob("vertex_shader.cso");
+	hr = g_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, g_vertexShader.GetAddressOf());
+	if (hr != S_OK)
+	{
+		throw std::runtime_error("*** ERROR: Failed create vertex shader ***\n");
+	}
+
+	Microsoft::WRL::ComPtr<ID3DBlob> psBlob = LoadBlob("pixel_shader.cso");
+	hr = g_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, g_pixelShader.GetAddressOf());
+	if (hr != S_OK)
+	{
+		throw std::runtime_error("*** ERROR: Failed create pixel shader ***\n");
+	}
+
+	// VertexBuffer
+	using namespace DirectX;
+	MyVertex cubeVerts[] =
+	{
+		{ XMFLOAT3(-1.0f, 1.0f, -1.0f), XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f) },
+		{ XMFLOAT3(1.0f, 1.0f, -1.0f), XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f) },
+		{ XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT4(0.0f, 1.0f, 1.0f, 1.0f) },
+		{ XMFLOAT3(-1.0f, 1.0f, 1.0f), XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f) },
+		{ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT4(1.0f, 0.0f, 1.0f, 1.0f) },
+		{ XMFLOAT3(1.0f, -1.0f, -1.0f), XMFLOAT4(1.0f, 1.0f, 0.0f, 1.0f) },
+		{ XMFLOAT3(1.0f, -1.0f, 1.0f), XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f) },
+		{ XMFLOAT3(-1.0f, -1.0f, 1.0f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f) },
+	};
+
+	D3D11_BUFFER_DESC bd = {};
+	bd.Usage = D3D11_USAGE_DEFAULT;
+	bd.ByteWidth = sizeof(cubeVerts);
+	bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	bd.CPUAccessFlags = 0;
+
+	D3D11_SUBRESOURCE_DATA initData = {};
+	initData.pSysMem = cubeVerts;
+	hr = g_device->CreateBuffer(&bd, &initData, g_vertexBuffer.GetAddressOf());
+	if (hr != S_OK)
+	{
+		throw std::runtime_error("*** ERROR: Failed create vertex buffer ***\n");
+	}
+
+	// IndexBuffer
+	WORD indices[] =
+	{
+		3,1,0,
+		2,1,3,
+
+		0,5,4,
+		1,5,0,
+
+		3,4,7,
+		0,4,3,
+
+		1,6,5,
+		2,6,1,
+
+		2,7,6,
+		3,7,2,
+
+		6,4,5,
+		7,4,6,
+	};
+
+	bd.Usage = D3D11_USAGE_DEFAULT;
+	bd.ByteWidth = sizeof(indices);
+	bd.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	bd.CPUAccessFlags = 0;
+	initData.pSysMem = indices;
+	hr = g_device->CreateBuffer(&bd, &initData, g_indexBuffer.GetAddressOf());
+	if (hr != S_OK)
+	{
+		throw std::runtime_error("*** ERROR: Failed create index buffer ***\n");
+	}
+
+	// InputLayout
+	D3D11_INPUT_ELEMENT_DESC layout[] =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	};
+
+	hr = g_device->CreateInputLayout(
+		layout,
+		ARRAYSIZE(layout),
+		vsBlob->GetBufferPointer(),
+		vsBlob->GetBufferSize(),
+		g_inputLayout.GetAddressOf());
+
+	if (hr != S_OK)
+	{
+		throw std::runtime_error("*** ERROR: Failed create input layout ***\n");
+	}
 }
 
+//--------------------------------------------------------------------------------------
+// Main Draw
+//--------------------------------------------------------------------------------------
 void DrawSomething(HWND hWnd)
 {
+	// set viewport
+	D3D11_VIEWPORT viewport = { 1280.f, 720.f, 0.f, 1.f, 0, 0 };
+	g_deviceContext->RSSetViewports(1, &viewport);
+
+	// set back buffer
 	ID3D11RenderTargetView* renderTargets[] = { g_backBufferView.Get() };
 	g_deviceContext->OMSetRenderTargets(ARRAYSIZE(renderTargets), renderTargets, g_depthBufferView.Get());
+
+	// clear
 	g_deviceContext->ClearRenderTargetView(g_backBufferView.Get(), DirectX::Colors::DimGray);
+
+	// bind geometry
+	ID3D11Buffer* vertexBuffers[] = { g_vertexBuffer.Get() };
+	UINT vertexBufferStrides[] = { sizeof(MyVertex) };
+	UINT vertexBufferOffsets[] = { 0 };
+	g_deviceContext->IASetVertexBuffers(0, ARRAYSIZE(vertexBuffers), vertexBuffers, vertexBufferStrides, vertexBufferOffsets);
+	g_deviceContext->IASetIndexBuffer(g_indexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
+
+	// Set the input layout
+	g_deviceContext->IASetInputLayout(g_inputLayout.Get());
+
+	// set topology
+	g_deviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	// bind shaders
+	g_deviceContext->VSSetShader(g_vertexShader.Get(), nullptr, 0);
+	g_deviceContext->PSSetShader(g_pixelShader.Get(), nullptr, 0);
+
+	// w00t
+	g_deviceContext->DrawIndexed(36 /*12 tris*/, 0, 0);
+
+	// present to display!
 	g_swapChain->Present(0, 0);
 }
 
+//--------------------------------------------------------------------------------------
+// D3D Cleanup
+//--------------------------------------------------------------------------------------
 void DestroyD3D()
 {
 	g_device.Reset();
