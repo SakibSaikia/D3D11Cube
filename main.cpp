@@ -7,16 +7,15 @@
 #include <d3dcompiler.h>
 #include <DirectXMath.h>
 #include <DirectXColors.h>
-
-#include <array>
-#include <cassert>
 #include <fstream>
-#include <memory>
 #include <stdexcept>
 
 #pragma comment(lib, "D3D11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "D3DCompiler.lib")
+
+constexpr UINT k_screenWidth = 600;
+constexpr UINT k_screenHeight = 600;
 
 //--------------------------------------------------------------------------------------
 // Structures
@@ -111,8 +110,8 @@ void InitializeWindow(HINSTANCE hInstance, int nShowCmd)
 		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT,
 		CW_USEDEFAULT,
-		1280,
-		720,
+		k_screenWidth,
+		k_screenHeight,
 		nullptr,
 		nullptr,
 		hInstance,
@@ -224,7 +223,7 @@ void InitializeD3D(HWND hWnd)
 		nullptr, 
 		D3D_DRIVER_TYPE_HARDWARE, 
 		nullptr, 
-		D3D11_CREATE_DEVICE_DEBUG, 
+		0, 
 		featureLevels, 
 		ARRAYSIZE(featureLevels),
 		D3D11_SDK_VERSION, 
@@ -246,8 +245,8 @@ void InitializeD3D(HWND hWnd)
 	}
 
 	DXGI_SWAP_CHAIN_DESC1 sd = {};
-	sd.Width = 1280;
-	sd.Height = 720;
+	sd.Width = k_screenWidth;
+	sd.Height = k_screenHeight;
 	sd.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
 	sd.SampleDesc.Count = 1;
 	sd.SampleDesc.Quality = 0;
@@ -283,8 +282,8 @@ void InitializeD3D(HWND hWnd)
 
 	// DepthBuffer
 	D3D11_TEXTURE2D_DESC descDepth = {};
-	descDepth.Width = 1280;
-	descDepth.Height = 720;
+	descDepth.Width = k_screenWidth;
+	descDepth.Height = k_screenHeight;
 	descDepth.MipLevels = 1;
 	descDepth.ArraySize = 1;
 	descDepth.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
@@ -419,12 +418,12 @@ void InitializeD3D(HWND hWnd)
 	// Constants
 	g_worldTransform = XMMatrixIdentity();
 
-	XMVECTOR eye = XMVectorSet(0.0f, 4.0f, -10.0f, 0.0f);
+	XMVECTOR eye = XMVectorSet(0.0f, 4.0f, -6.0f, 0.0f);
 	XMVECTOR lookAt = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 	g_viewTransform = XMMatrixLookAtLH(eye, lookAt, up);
 
-	g_projectionTransform = XMMatrixPerspectiveFovLH(XM_PIDIV4, 1280.f/720.f, 0.01f, 100.0f);
+	g_projectionTransform = XMMatrixPerspectiveFovLH(XM_PIDIV4, k_screenWidth / static_cast<float>(k_screenHeight), 0.01f, 100.0f);
 
 	// RasterizerState
 	D3D11_RASTERIZER_DESC rsDesc;
@@ -470,7 +469,7 @@ void DrawSomething(HWND hWnd)
 	g_deviceContext->UpdateSubresource(g_constantBuffer.Get(), 0, nullptr, &cb, 0, 0);
 
 	// set viewport
-	D3D11_VIEWPORT viewport = { 0, 0, 1280.f, 720.f, 0.f, 1.f };
+	D3D11_VIEWPORT viewport = { 0, 0, static_cast<float>(k_screenWidth), static_cast<float>(k_screenHeight), 0.f, 1.f };
 	g_deviceContext->RSSetViewports(1, &viewport);
 
 	// set back buffer

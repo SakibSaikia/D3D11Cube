@@ -12,7 +12,11 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="vertex_shader.hlsl" />
-    <FxCompile Include="pixel_shader.hlsl" />
+    <FxCompile Include="pixel_shader.hlsl">
+      <Filter>Source Files</Filter>
+    </FxCompile>
+    <FxCompile Include="vertex_shader.hlsl">
+      <Filter>Source Files</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>
