@@ -5,9 +5,11 @@
 #include <dxgi1_4.h>
 #include <d3d11_1.h>
 #include <DirectXMath.h>
+#include <DirectXColors.h>
 
 #include <array>
 #include <cassert>
+#include <fstream>
 #include <memory>
 #include <stdexcept>
 
@@ -274,7 +276,10 @@ void InitializeD3D(HWND hWnd)
 
 void DrawSomething(HWND hWnd)
 {
-
+	ID3D11RenderTargetView* renderTargets[] = { g_backBufferView.Get() };
+	g_deviceContext->OMSetRenderTargets(ARRAYSIZE(renderTargets), renderTargets, g_depthBufferView.Get());
+	g_deviceContext->ClearRenderTargetView(g_backBufferView.Get(), DirectX::Colors::DimGray);
+	g_swapChain->Present(0, 0);
 }
 
 void DestroyD3D()
