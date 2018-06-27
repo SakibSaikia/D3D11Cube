@@ -52,6 +52,8 @@ Microsoft::WRL::ComPtr<ID3D11InputLayout> g_inputLayout;
 Microsoft::WRL::ComPtr<ID3D11Buffer> g_vertexBuffer;
 Microsoft::WRL::ComPtr<ID3D11Buffer> g_indexBuffer;
 Microsoft::WRL::ComPtr<ID3D11Buffer> g_constantBuffer;
+Microsoft::WRL::ComPtr<ID3D11DepthStencilState> g_depthStencilState;
+Microsoft::WRL::ComPtr<ID3D11RasterizerState> g_rasterizerState;
 DirectX::XMMATRIX g_worldTransform;
 DirectX::XMMATRIX g_viewTransform;
 DirectX::XMMATRIX g_projectionTransform;
@@ -423,6 +425,36 @@ void InitializeD3D(HWND hWnd)
 	g_viewTransform = XMMatrixLookAtLH(eye, lookAt, up);
 
 	g_projectionTransform = XMMatrixPerspectiveFovLH(XM_PIDIV4, 1280.f/720.f, 0.01f, 100.0f);
+
+	// RasterizerState
+	D3D11_RASTERIZER_DESC rsDesc;
+	rsDesc.AntialiasedLineEnable = FALSE;
+	rsDesc.CullMode = D3D11_CULL_BACK;
+	rsDesc.DepthBias = 0;
+	rsDesc.DepthBiasClamp = 0.0f;
+	rsDesc.DepthClipEnable = TRUE;
+	rsDesc.FillMode = D3D11_FILL_SOLID;
+	rsDesc.FrontCounterClockwise = FALSE;
+	rsDesc.MultisampleEnable = TRUE;
+	rsDesc.ScissorEnable = FALSE;
+	rsDesc.SlopeScaledDepthBias = 0.0f;
+	hr = g_device->CreateRasterizerState(&rsDesc, g_rasterizerState.GetAddressOf());
+	if (hr != S_OK)
+	{
+		throw std::runtime_error("*** ERROR: Failed create rasterizer state ***\n");
+	}
+
+	// DepthStencilState
+	D3D11_DEPTH_STENCIL_DESC dsDesc = {};
+	dsDesc.DepthEnable = TRUE;
+	dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+	dsDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+	dsDesc.StencilEnable = FALSE;
+	hr = g_device->CreateDepthStencilState(&dsDesc, g_depthStencilState.GetAddressOf());
+	if (hr != S_OK)
+	{
+		throw std::runtime_error("*** ERROR: Failed create depth stencil state ***\n");
+	}
 }
 
 //--------------------------------------------------------------------------------------
@@ -438,7 +470,7 @@ void DrawSomething(HWND hWnd)
 	g_deviceContext->UpdateSubresource(g_constantBuffer.Get(), 0, nullptr, &cb, 0, 0);
 
 	// set viewport
-	D3D11_VIEWPORT viewport = { 1280.f, 720.f, 0.f, 1.f, 0, 0 };
+	D3D11_VIEWPORT viewport = { 0, 0, 1280.f, 720.f, 0.f, 1.f };
 	g_deviceContext->RSSetViewports(1, &viewport);
 
 	// set back buffer
@@ -469,6 +501,12 @@ void DrawSomething(HWND hWnd)
 	// bind constants
 	ID3D11Buffer* constantBuffers[] = { g_constantBuffer.Get() };
 	g_deviceContext->VSSetConstantBuffers(0, ARRAYSIZE(constantBuffers), constantBuffers);
+
+	// rasterizer state
+	g_deviceContext->RSSetState(g_rasterizerState.Get());
+
+	// output merger state
+	g_deviceContext->OMSetDepthStencilState(g_depthStencilState.Get(), 0);
 
 	// w00t
 	g_deviceContext->DrawIndexed(36 /*12 tris*/, 0, 0);
